@@ -140,3 +140,52 @@ Le **Permission Policy** sono *identity based policy* e definiscono cosa può fa
 ### How to define policies (Managed vs Inline)
 Le **Managed Policy** vengono prima create e successivamente assegnate a utenti, ruoli, gruppi. Quindi riutilizzabili e una modifica alla policy si ripercuote a tutte le identity che hanno tale policy assegnata.<br>
 Le Inline Policy definite direttamente per uno specifico utente, ruolo o gruppo. Utile se vogliamo garantire access/deny specifici per una identity.
+
+# Lambda
+*It is a computation service that runs your code in response to events and automatically manages the compute resources*.<br>
+Alcune caratteristiche:
+- **Serverless**: non dobbiamo gestire manualmente le risorse. AWS scala in automatico in base al traffico
+**Short live**: l'esecuzione può durare massimo **15 minuti**
+- Eseguita **on-demand** quando viene ricevuto un evento
+- **Stateless** poiché non viene mantenuto uno stato tra le richieste
+
+Di una lambda possiamo <u>specificare la memoria da 128MB a 10GB e la CPU è allocata di conseguenza in base alla RAM selezionata</u>. Lo spazio su dove viene memorizzato il codice è limitato a 10GB di memoria.
+
+## Lambda Instances
+Una richiesta viene presa da un'istanza di una lambda. Quando non c'è un'istanza disponibili, viene creata una sorta di *virtual machine*: questo processo è chiamato **cold start**. Per ottimizzare le risorse un'istanza non viene rimossa subito dopo aver processato un evento, ma rimane in *idle* per eventuali richieste imminenti. Quando un'istanza è disponibile per processare un nuovo evento viene nominato **warm start**<br>
+Ci possono essere al massimo <u>1000 istanze attive contemporaneamente in una regione</u>.
+
+Quando implementiamo una lambda è opportuno porre attenzione alla fase chiamata **init phase**. Per operazioni più dispendiose, come le inizializzazioni di connessioni a database o client TCP, è buona norma farlo *globalmente* in modo tale che più richieste in sequenza processate da un'istanza eseguano queste operazioni solo una volta e possano riutilizzare le risorse.
+
+## Lambda Pricing
+Il costo di un'esecuzione di una richiesta è dato da: $execution\_time * execution\_cost$.<br>
+Il <u>tempo di esecuzione è pari al tempo necessario per processare una richiesta</u>, mentre il <u>costo di esecuzione dipende dalla memoria allocata per la lambda</u>.
+
+Alcuni prezzi per le regione *eu-central-1 (Frankfurt)*:
+| Memoria (MB) | Prezzo per 1 millisecondo |
+|--------------|---------------------------|
+| 128          | 0,0000000021 USD          |
+| 512          | 0,0000000083 USD          |
+| 1.024        | 0,0000000167 USD          |
+
+Inoltre AWS Lambda ha un <u>costo in base al numero di richieste indipendente dalla memoria allocata, pari a circa 0.20$ per ogni 1kk chiamate</u>.
+
+## Sync vs Async Lambdas
+Le lambda possono essere invocate in modo **sincrono**, ad esempio da una CLI/SDK oppure una chiamata HTTP ad un API Gateway che inoltra la richiesta alla lambda. Quando il client che invoca la lambda attende la risposta<br>
+<img src="images/lambda_sync_invocations.png" style="width: 600px;"/>
+
+Le lambda possono essere invocate in modo asincrono da altri servizi integrati, come S3, SNS, etc. <u>A fronte di un errore la lambda viene eseguita 3 volte dopo alcuni intervalli di tempo</u>. Se è buona norma configurare una DLQ per i messaggi in errore.<br>
+Un'altra cosa a cui prestare attenzione è l'**idempotenza**. Non abbiamo la garanzia che un evento venga ricevuto solamente una volta, quindi configurare la lambda per evitare processi multipli della stessa richiesta.
+
+## Lambda use cases
+Alcuni casi d'uso e limitazioni delle lambda.
+
+Casi d'uso:
+- uno scenario tipico è REST API + API Gateway + Lambda
+- background processing
+- applicazioni che vengono eseguite in maniera spot o dove è necessario gestire picchi di carico non prevedibili
+
+Limitazioni:
+- non utilizzare per *long-running jobs*, statefull application
+- non utilizzare se necessario mantentere *web socket* aperte (ad esempio real time application)
+- limiti dei payload 6MB per invocazioni sincrone, 256KB per quelle asincrone
